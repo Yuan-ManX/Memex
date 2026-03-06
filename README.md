@@ -8,8 +8,7 @@
 
 Memex is an open-source memory infrastructure designed for AI agents and LLM-powered applications.
 
-Modern AI systems are powerful but **stateless** — every interaction starts from zero.  
-Memex provides a **persistent memory layer** that allows AI systems to remember users, experiences, knowledge, and context across time.
+Modern AI systems are powerful but **stateless** — every interaction starts from zero. Memex provides a **persistent memory layer** that allows AI systems to remember users, experiences, knowledge, and context across time.
 
 With Memex, AI applications can move from **stateless tools** to **learning systems that grow with experience**.
 
