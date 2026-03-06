@@ -1,5 +1,5 @@
 <div align="center">
-<h1>🧠 Memex:<br/>Memory Infrastructure for AI Agents.</h1>
+<h1>🧠 Memex<br/>Memory Infrastructure for AI Agents.</h1>
 </div>
 
 
