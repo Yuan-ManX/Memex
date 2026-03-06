@@ -12,8 +12,6 @@ Modern AI systems are powerful but **stateless** — every interaction starts fr
 
 With Memex, AI applications can move from **stateless tools** to **learning systems that grow with experience**.
 
----
-
 
 ## ✨ Vision
 
@@ -30,7 +28,7 @@ Our mission:
 
 > Build the memory layer for the next generation of AI systems.
 
----
+
 
 ## 🚀 Key Features
 
@@ -48,7 +46,7 @@ Examples include:
 
 This allows AI systems to **store meaningful information instead of raw conversation logs**.
 
----
+
 
 ### 🔎 Hybrid Memory Retrieval
 
@@ -61,7 +59,7 @@ Memex supports multiple retrieval strategies:
 
 This enables both **fast recall and deep contextual reasoning**.
 
----
+
 
 ### 🗂 Hierarchical Memory Architecture
 
@@ -88,7 +86,7 @@ Benefits include:
 - efficient retrieval
 - scalable knowledge growth
 
----
+
 
 ### 🔄 Self-Evolving Memory
 
@@ -101,7 +99,7 @@ Memex continuously improves stored memory through:
 
 Important memories become stronger over time, while irrelevant information gradually fades.
 
----
+
 
 ### 🎨 Multimodal Memory
 
@@ -117,7 +115,7 @@ Memex supports multiple data modalities.
 
 All modalities can be converted into unified memory representations.
 
----
+
 
 ## 🏗 Architecture
 
@@ -155,7 +153,7 @@ Core modules include:
 - **Memory Retrieval** — retrieve relevant context for reasoning  
 - **Memory Consolidation** — maintain long-term knowledge
 
----
+
 
 ## 📦 Installation
 
@@ -173,7 +171,7 @@ Or install via pip:
 pip install memex
 ```
 
----
+
 
 ## ⚡ Quick Start
 
@@ -204,7 +202,7 @@ memories = memex.search(
 print(memories)
 ```
 
----
+
 
 ## 🔌 API Example
 
@@ -223,7 +221,7 @@ Example request:
 }
 ```
 
----
+
 
 ### Retrieve Memory
 
@@ -240,7 +238,7 @@ Example request:
 }
 ```
 
----
+
 
 ## 🧠 Memory Types
 
@@ -254,7 +252,7 @@ Memex supports multiple memory categories.
 | Preference Memory | User preferences |
 | Relationship Memory | Social connections |
 
----
+
 
 ## 🎯 Use Cases
 
@@ -272,7 +270,7 @@ Autonomous agents capable of long-term planning and learning.
 ### AI Workflows
 Systems that learn from previous tasks and improve performance.
 
----
+
 
 ## 🛣 Roadmap
 
@@ -285,7 +283,7 @@ Planned features include:
 - reinforcement learning from memory
 - distributed memory infrastructure
 
----
+
 
 
 ## ⭐ Star History
@@ -294,7 +292,7 @@ If you find Memex useful, please consider giving the project a star ⭐
 
 It helps the project grow and reach more developers.
 
----
+
 
 
 ## 📜 Contribution & License
@@ -310,9 +308,7 @@ You can contribute by:
 
 Please refer to [LICENSE](LICENSE).
 
----
 
----
 
 ## 🔮 The Future
 
