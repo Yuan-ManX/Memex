@@ -258,16 +258,16 @@ Memex supports multiple memory categories.
 
 Memex can power many types of AI applications.
 
-### AI Assistants
+#### AI Assistants
 Personal assistants that remember users across conversations.
 
-### AI Companions
+#### AI Companions
 AI companions capable of building emotional continuity.
 
-### AI Agents
+#### AI Agents
 Autonomous agents capable of long-term planning and learning.
 
-### AI Workflows
+#### AI Workflows
 Systems that learn from previous tasks and improve performance.
 
 
