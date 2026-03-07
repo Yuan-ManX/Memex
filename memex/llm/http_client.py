@@ -1,0 +1,480 @@
+from __future__ import annotations
+
+import base64
+import logging
+import os
+from pathlib import Path
+from typing import Any, Callable, cast
+
+import httpx
+
+from memex.llm.backends.base import LLMBackend
+from memex.llm.backends.doubao import DoubaoLLMBackend
+from memex.llm.backends.grok import GrokBackend
+from memex.llm.backends.openai import OpenAILLMBackend
+from memex.llm.backends.openrouter import OpenRouterLLMBackend
+
+
+logger = logging.getLogger("memex.llm")
+
+
+# ============================================================
+# Utilities
+# ============================================================
+
+
+def _load_proxy() -> str | None:
+    """Load proxy configuration from environment."""
+    return (
+        os.getenv("MEMEX_HTTP_PROXY")
+        or os.getenv("HTTP_PROXY")
+        or os.getenv("HTTPS_PROXY")
+        or None
+    )
+
+
+# ============================================================
+# Embedding Backends
+# ============================================================
+
+
+class EmbeddingBackend:
+    """Base embedding backend."""
+
+    name: str
+    embedding_endpoint: str
+
+    def build_embedding_payload(
+        self,
+        *,
+        inputs: list[str],
+        embed_model: str,
+    ) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def parse_embedding_response(
+        self,
+        data: dict[str, Any],
+    ) -> list[list[float]]:
+        raise NotImplementedError
+
+
+class OpenAIEmbeddingBackend(EmbeddingBackend):
+
+    name = "openai"
+    embedding_endpoint = "embeddings"
+
+    def build_embedding_payload(
+        self,
+        *,
+        inputs: list[str],
+        embed_model: str,
+    ) -> dict[str, Any]:
+
+        return {
+            "model": embed_model,
+            "input": inputs,
+        }
+
+    def parse_embedding_response(
+        self,
+        data: dict[str, Any],
+    ) -> list[list[float]]:
+
+        return [
+            cast(list[float], item["embedding"])
+            for item in data["data"]
+        ]
+
+
+class DoubaoEmbeddingBackend(EmbeddingBackend):
+
+    name = "doubao"
+    embedding_endpoint = "api/v3/embeddings"
+
+    def build_embedding_payload(
+        self,
+        *,
+        inputs: list[str],
+        embed_model: str,
+    ) -> dict[str, Any]:
+
+        return {
+            "model": embed_model,
+            "input": inputs,
+            "encoding_format": "float",
+        }
+
+    def parse_embedding_response(
+        self,
+        data: dict[str, Any],
+    ) -> list[list[float]]:
+
+        return [
+            cast(list[float], item["embedding"])
+            for item in data["data"]
+        ]
+
+
+class OpenRouterEmbeddingBackend(EmbeddingBackend):
+    """OpenRouter embedding API (OpenAI compatible)."""
+
+    name = "openrouter"
+    embedding_endpoint = "api/v1/embeddings"
+
+    def build_embedding_payload(
+        self,
+        *,
+        inputs: list[str],
+        embed_model: str,
+    ) -> dict[str, Any]:
+
+        return {
+            "model": embed_model,
+            "input": inputs,
+        }
+
+    def parse_embedding_response(
+        self,
+        data: dict[str, Any],
+    ) -> list[list[float]]:
+
+        return [
+            cast(list[float], item["embedding"])
+            for item in data["data"]
+        ]
+
+
+# ============================================================
+# Backend Registry
+# ============================================================
+
+
+LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
+    OpenAILLMBackend.name: OpenAILLMBackend,
+    DoubaoLLMBackend.name: DoubaoLLMBackend,
+    GrokBackend.name: GrokBackend,
+    OpenRouterLLMBackend.name: OpenRouterLLMBackend,
+}
+
+
+EMBEDDING_BACKENDS: dict[str, type[EmbeddingBackend]] = {
+    OpenAIEmbeddingBackend.name: OpenAIEmbeddingBackend,
+    DoubaoEmbeddingBackend.name: DoubaoEmbeddingBackend,
+    "grok": OpenAIEmbeddingBackend,
+    OpenRouterEmbeddingBackend.name: OpenRouterEmbeddingBackend,
+}
+
+
+# ============================================================
+# HTTP LLM Client
+# ============================================================
+
+
+class HTTPLLMClient:
+    """
+    Unified HTTP LLM Client.
+
+    Supports:
+
+    - Chat completion
+    - Vision inference
+    - Summarization
+    - Embedding generation
+    - Audio transcription
+
+    This client is designed for Memex memory infrastructure
+    and agent-based systems.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        chat_model: str,
+        provider: str = "openai",
+        embed_model: str | None = None,
+        endpoint_overrides: dict[str, str] | None = None,
+        timeout: int = 60,
+    ):
+
+        self.base_url = base_url.rstrip("/") + "/"
+        self.api_key = api_key
+        self.chat_model = chat_model
+        self.embed_model = embed_model or chat_model
+        self.provider = provider.lower()
+        self.timeout = timeout
+
+        self.proxy = _load_proxy()
+
+        self.backend = self._load_backend(self.provider)
+        self.embedding_backend = self._load_embedding_backend(self.provider)
+
+        overrides = endpoint_overrides or {}
+
+        self.chat_endpoint = (
+            overrides.get("chat")
+            or overrides.get("summary")
+            or self.backend.summary_endpoint
+        ).lstrip("/")
+
+        self.embedding_endpoint = (
+            overrides.get("embeddings")
+            or overrides.get("embedding")
+            or self.embedding_backend.embedding_endpoint
+        ).lstrip("/")
+
+        self.client = httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=self.timeout,
+            proxy=self.proxy,
+        )
+
+    # ============================================================
+    # Chat
+    # ============================================================
+
+    async def chat(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
+        temperature: float = 0.2,
+    ) -> tuple[str, dict[str, Any]]:
+
+        messages: list[dict[str, Any]] = []
+
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+
+        messages.append({"role": "user", "content": prompt})
+
+        payload: dict[str, Any] = {
+            "model": self.chat_model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+
+        if max_tokens:
+            payload["max_tokens"] = max_tokens
+
+        resp = await self.client.post(
+            self.chat_endpoint,
+            json=payload,
+            headers=self._headers(),
+        )
+
+        resp.raise_for_status()
+
+        data = resp.json()
+
+        logger.debug("Memex LLM chat response: %s", data)
+
+        return self.backend.parse_summary_response(data), data
+
+    # ============================================================
+    # Summarize
+    # ============================================================
+
+    async def summarize(
+        self,
+        text: str,
+        *,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
+    ) -> tuple[str, dict[str, Any]]:
+
+        payload = self.backend.build_summary_payload(
+            text=text,
+            system_prompt=system_prompt,
+            chat_model=self.chat_model,
+            max_tokens=max_tokens,
+        )
+
+        resp = await self.client.post(
+            self.chat_endpoint,
+            json=payload,
+            headers=self._headers(),
+        )
+
+        resp.raise_for_status()
+
+        data = resp.json()
+
+        logger.debug("Memex summarize response: %s", data)
+
+        return self.backend.parse_summary_response(data), data
+
+    # ============================================================
+    # Vision
+    # ============================================================
+
+    async def vision(
+        self,
+        prompt: str,
+        image_path: str,
+        *,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
+    ) -> tuple[str, dict[str, Any]]:
+
+        image_data = Path(image_path).read_bytes()
+
+        base64_image = base64.b64encode(image_data).decode()
+
+        suffix = Path(image_path).suffix.lower()
+
+        mime_type = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+        }.get(suffix, "image/jpeg")
+
+        payload = self.backend.build_vision_payload(
+            prompt=prompt,
+            base64_image=base64_image,
+            mime_type=mime_type,
+            system_prompt=system_prompt,
+            chat_model=self.chat_model,
+            max_tokens=max_tokens,
+        )
+
+        resp = await self.client.post(
+            self.chat_endpoint,
+            json=payload,
+            headers=self._headers(),
+        )
+
+        resp.raise_for_status()
+
+        data = resp.json()
+
+        logger.debug("Memex vision response: %s", data)
+
+        return self.backend.parse_summary_response(data), data
+
+    # ============================================================
+    # Embedding
+    # ============================================================
+
+    async def embed(
+        self,
+        inputs: list[str],
+    ) -> tuple[list[list[float]], dict[str, Any]]:
+
+        payload = self.embedding_backend.build_embedding_payload(
+            inputs=inputs,
+            embed_model=self.embed_model,
+        )
+
+        resp = await self.client.post(
+            self.embedding_endpoint,
+            json=payload,
+            headers=self._headers(),
+        )
+
+        resp.raise_for_status()
+
+        data = resp.json()
+
+        logger.debug("Memex embedding response: %s", data)
+
+        embeddings = self.embedding_backend.parse_embedding_response(data)
+
+        return embeddings, data
+
+    # ============================================================
+    # Transcription
+    # ============================================================
+
+    async def transcribe(
+        self,
+        audio_path: str,
+        *,
+        prompt: str | None = None,
+        language: str | None = None,
+        response_format: str = "text",
+    ) -> tuple[str, dict[str, Any] | None]:
+
+        raw_response: dict[str, Any] | None = None
+
+        with open(audio_path, "rb") as audio_file:
+
+            files = {
+                "file": (
+                    Path(audio_path).name,
+                    audio_file,
+                    "application/octet-stream",
+                )
+            }
+
+            data: dict[str, Any] = {
+                "model": "gpt-4o-mini-transcribe",
+                "response_format": response_format,
+            }
+
+            if prompt:
+                data["prompt"] = prompt
+
+            if language:
+                data["language"] = language
+
+            resp = await self.client.post(
+                "v1/audio/transcriptions",
+                files=files,
+                data=data,
+                headers=self._headers(),
+            )
+
+        resp.raise_for_status()
+
+        if response_format == "text":
+            result = resp.text
+        else:
+            raw_response = resp.json()
+            result = raw_response.get("text", "")
+
+        logger.debug(
+            "Memex transcription result (%s chars)",
+            len(result),
+        )
+
+        return result or "", raw_response
+
+    # ============================================================
+    # Helpers
+    # ============================================================
+
+    def _headers(self) -> dict[str, str]:
+
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
+    def _load_backend(self, provider: str) -> LLMBackend:
+
+        factory = LLM_BACKENDS.get(provider)
+
+        if not factory:
+            raise ValueError(
+                f"Unsupported provider '{provider}'. "
+                f"Available: {', '.join(LLM_BACKENDS)}"
+            )
+
+        return factory()
+
+    def _load_embedding_backend(self, provider: str) -> EmbeddingBackend:
+
+        factory = EMBEDDING_BACKENDS.get(provider)
+
+        if not factory:
+            raise ValueError(
+                f"Unsupported embedding provider '{provider}'. "
+                f"Available: {', '.join(EMBEDDING_BACKENDS)}"
+            )
+
+        return factory()
+  
