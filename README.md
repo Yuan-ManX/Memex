@@ -1,10 +1,13 @@
 <div align="center">
-<h1>🧠 Memex<br/>Memory Infrastructure for AI Agents.</h1>
-</div>
+
+<img src="./assets/Memex-Logo.png" alt="Memex Logo">
 
 
 > Memory Infrastructure for AI Agents  
 > Build persistent, structured, and evolving memory for intelligent systems.
+
+</div>
+
 
 Memex is an open-source memory infrastructure designed for AI agents and LLM-powered applications.
 
